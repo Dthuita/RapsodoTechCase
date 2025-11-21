@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+  backend:
+    build: 
+      context: ./BackendAPI
+      dockerfile: backend.Dockerfile
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/"]
+      interval: 5s
+      timeout: 15s
+      retries: 5
+    ports:
+      - "8081:8081"
+    networks:
+      - rabbitmq_nodejs
+    environment:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672
+
+  rabbitmq:
+    image: rabbitmq:3.8-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5673:5672"    
+      - "15673:15672"
+    volumes:
+      - ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
+      - ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
+    networks:
+      - rabbitmq_nodejs
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 5s
+      timeout: 15s
+      retries: 5
+
+  techCase:
+    image: mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - rabbitmq_nodejs
+
+  get_consumer:
+    build:
+      context: ./GetConsumer
+      dockerfile: get_consumer.Dockerfile
+    depends_on:
+      - rabbitmq
+      - techCase
+    environment:
+      NODE_ENV: production
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672
+      MONGODB_URL: mongodb://techCase:27017
+    command: [
+      "/wait-for-it.sh", "rabbitmq:5672", "--timeout=40", "--", 
+      "node", "--max-old-space-size=2048", "get_consumer.js"
+    ]
+
+    networks:
+      - rabbitmq_nodejs
+
+  post_consumer:
+    build:
+      context: ./PostConsumer
+      dockerfile: post_consumer.Dockerfile
+    depends_on:
+      - backend
+      - rabbitmq
+      - techCase
+    environment:
+      NODE_ENV: production
+      AMQP_URL: amqp://guest:guest@rabbitmq:5672
+      MONGODB_URL: mongodb://techCase:27017
+    command: [
+      "/wait-for-it.sh", "rabbitmq:5672", "--timeout=40", "--", 
+      "node", "--max-old-space-size=2048", "post_consumer.js"
+    ]
+    networks:
+      - rabbitmq_nodejs
+
+networks:
+  rabbitmq_nodejs:
+    driver: bridge
