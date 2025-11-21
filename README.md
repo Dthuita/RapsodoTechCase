@@ -78,7 +78,7 @@ In order to run the project, use **two terminals**:
 docker compose up --build
 ```
 - Starts all services (BackendAPI, consumers, RabbitMQ, MongoDB).
-- Note: remove existing container of rabbitmq to run w/o failure
+- Note: remove or rename pre-existing container of rabbitmq to run w/o failure
 ### Terminal 2
 ```bash
 ./runall.sh
